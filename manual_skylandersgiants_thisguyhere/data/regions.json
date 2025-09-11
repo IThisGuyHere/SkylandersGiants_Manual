@@ -92,22 +92,26 @@
     "requires": "|Progressive Chapter:15| or |Lost City of Arkus|"
   },
   "Chapter 16": {
-    "connects_to": [],
+    "connects_to": ["Final Boss"],
     "requires": "|Progressive Chapter:16| or |Bringing Order to Kaos!|"
   },
   "Final Boss": {
     "connects_to": [],
-    "requires": "|Progressive Chapter:16| or ({OptOneDynamic(Map to Arkus Fragment:chapters_to_beat)} and {YamlDisabled(linear_mode)})"
+    "requires": "|Progressive Chapter:16| or ({OptOneDynamic(Map of Arkus Fragment:chapters_to_beat)} and {YamlDisabled(linear_mode)})"
   },
 
 
   "Hub": {
     "connects_to": [
-      "Darklight Crypt", "Dragon's Peak", "Empire of Ice", "Pirate Seas", "Arenas", "Final Boss"
+      "Darklight Crypt", "Dragon's Peak", "Empire of Ice", "Pirate Seas", "Arenas", "Final Boss", 
+      "Chapter 1", "Chapter 2", "Chapter 3", "Chapter 4", "Chapter 5", "Chapter 6", "Chapter 7", "Chapter 8", 
+      "Chapter 9", "Chapter 10", "Chapter 11", "Chapter 12", "Chapter 13", "Chapter 14", "Chapter 15", "Chapter 16"
     ],
-    "requires": "|Progressive Chapter:2| or {YamlDisabled(linear_mode)}"
+    "requires": "|Progressive Chapter:2| or {YamlDisabled(linear_mode)}",
+    "starting": true
   },
-   "Arenas": {
+  
+  "Arenas": {
     "connects_to": [],
     "requires": "|Progressive Chapter:3| or {YamlDisabled(linear_mode)}"
   },
