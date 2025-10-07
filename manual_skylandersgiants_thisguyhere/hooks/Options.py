@@ -42,14 +42,26 @@ class Goal(Choice):
     all_levels_perfected = 1
 
 class LinearMode(Toggle):
-    """Receive chapters sequentially instead of in a random order. If false, you will need an existing save with minimal progress."""
+    """Receive chapters sequentially instead of in a random order. If set to false, you will need an existing save with minimal progress."""
     display_name = "Linear Mode"
     default = True
 
 class NumChaptersToBeat(Range):
-    """Number of chapter completions required to challenge Kaos. Set this low for synchronous multiworlds."""
+    """The number of chapter completions required to challenge Kaos. Set this low for synchronous multiworlds."""
     display_name = "Chapters to Beat"
     range_start = 1
+    range_end = 20
+    default = 16
+
+class NumChaptersInPool(Range):
+    """The number of story chapters included in the item and location pools. 
+    This cannot be less than chapters_to_beat, and will be increased if necessary.
+    In linear mode, all chapters beyond this number (minus adventure packs) will be removed. 
+    If set to less than 16, you will need an existing save with minimal progress (even in linear mode).
+    This option is primarily designed for synchronous multiworlds.
+    Each chapter removed will significantly reduce the amound of locations. As a safeguard, you cannot remove more than half of the chapters."""
+    display_name = "Chapters In Pool"
+    range_start = 8
     range_end = 20
     default = 16
 
@@ -59,12 +71,12 @@ class CharactersAsItems(Toggle):
     default = True
 
 class ChallengesAsLocations(Toggle):
-    """Add locations for Cali's heroic challenges."""
+    """Adds locations for Cali's heroic challenges."""
     display_name = "Challenges as Locations"
     default = False
 
 class ArenasAsLocations(Toggle):
-    """Add locations for Brock's arena battles."""
+    """Adds locations for Brock's arena battles."""
     display_name = "Arenas as Locations"
     default = True
 
@@ -107,8 +119,7 @@ class CharactersToExclude(ItemSet):
     """
     Skylanders that will not be included in generation.
     Does nothing if CharactersAsItems is false.
-    Warning: if you have less than eight skylanders (and at least one from each element), some locations will be
-      unreachable, which will make All Levels Perfected and some Completionist checks impossible to achieve
+    Warning: multiworld generation WILL FAIL if you have less than eight skylanders (and at least one from each element)
     """
     display_name = "Characters to Exclude"
     verify_item_name = True
@@ -173,6 +184,7 @@ def before_options_defined(options: dict[str, Type[Option[Any]]]) -> dict[str, T
     options["goal"] = Goal
     options["linear_mode"] = LinearMode
     options["chapters_to_beat"] = NumChaptersToBeat
+    options["chapters_in_pool"] = NumChaptersInPool
     options["characters_as_items"] = CharactersAsItems
     options["challenges_as_locations"] = ChallengesAsLocations
     options["arenas_as_locations"] = ArenasAsLocations

@@ -1,6 +1,6 @@
 # Object classes from AP core, to represent an entire MultiWorld and this individual World that's part of it
 from worlds.AutoWorld import World
-from BaseClasses import MultiWorld, CollectionState, Item, ItemClassification, Entrance
+from BaseClasses import MultiWorld, CollectionState, Item, ItemClassification
 
 # Object classes from Manual -- extending AP core -- representing items and locations that are used in generation
 from ..Items import ManualItem
@@ -12,10 +12,12 @@ from ..Locations import ManualLocation
 from ..Data import game_table, item_table, location_table, region_table
 
 # These helper methods allow you to determine if an option has been set, or what its value is, for any player in the multiworld
-from ..Helpers import is_option_enabled, get_option_value, format_state_prog_items_key, ProgItemsCat, is_location_name_enabled, is_item_name_enabled
+from ..Helpers import is_option_enabled, get_option_value, format_state_prog_items_key, ProgItemsCat, is_location_name_enabled, is_item_name_enabled, clamp
 
 # calling logging.info("message") anywhere below in this file will output the message to both console and log file
 import logging
+
+import random
 
 ########################################################################################
 ## Order of method calls when the world generates:
@@ -46,7 +48,6 @@ def after_create_regions(world: World, multiworld: MultiWorld, player: int):
     locationNamesToRemove: list[str] = [] # List of location names
 
     # Add your code here to calculate which locations to remove
-        
 
     for region in multiworld.regions:
         if region.player == player:
@@ -57,7 +58,6 @@ def after_create_regions(world: World, multiworld: MultiWorld, player: int):
         multiworld.clear_location_cache()
 
     # in non-linear mode, we need to make the hub the new starting region and connect it to all chapters
-    # this is doing better than the other methods, but the output shows that I can immediately achieve victory
     if get_option_value(multiworld, player, "linear_mode"):
         # get rid of the chapter exits in Hub and the hub entrances in the chapters
        
@@ -83,13 +83,13 @@ def after_create_regions(world: World, multiworld: MultiWorld, player: int):
         chap_1 = multiworld.get_region("Chapter 1", player)
         manual = multiworld.get_region("Manual", player)
         manual.exits = [exit for exit in manual.exits if "Chapter 1" not in exit.name.split("To", 2)[1]]
-        chap_1.entrances = [entrance for entrance in chap_1.entrances if "Manual" not in entrance.name.split("To")[0]]
+        chap_1.entrances = [entrance for entrance in chap_1.entrances if "Manual" not in entrance.name.split("To")[0] and "Final Boss" not in entrance.name]
 
         # remove the chapter 16 link from final boss
-        c_16 = multiworld.get_region("Chapter 16", player)
-        c_16.exits = [exit for exit in c_16.exits if "Final Boss" not in exit.name]
+        #c_16 = multiworld.get_region("Chapter 16", player)
+        #c_16.exits = [exit for exit in c_16.exits if "Final Boss" not in exit.name]
         boss = multiworld.get_region("Final Boss", player)
-        boss.entrances = [entrance for entrance in boss.entrances if "Chapter 16" not in entrance.name]
+        boss.entrances = [entrance for entrance in boss.entrances if "Chapter 1" not in entrance.name]
 
         # then the connections between each set of numbered chapters
         hub.entrances = [enter for enter in hub.entrances if "Chapter" not in enter.name.split("To", 2)[0]]
@@ -97,49 +97,6 @@ def after_create_regions(world: World, multiworld: MultiWorld, player: int):
             if region.player == player and "Chapter" in region.name:
                 region.exits = [exit for exit in region.entrances if "Chapter" not in exit.name.split("To", 2)[1] and "Hub" not in exit.name.split("To", 2)[1]]
                 region.entrances = [enter for enter in region.entrances if "Chapter" not in enter.name.split("To", 2)[0]]
-        '''# new idea: don't remove the entrances and exits, but change their links
-        # i.e. get Manual's exit and change the 
-        manual = multiworld.get_region("Manual", player)
-        hub = multiworld.get_region("Hub", player)
-
-        manual.exits.clear()    # this exit needs to go between Hub and Chapter 1 instead
-        #manual.exits[0].connected_region = hub
-        #manual.exits[0].name = "ManualToHub"
-        hub.entrances[0].name = "ManualToHub"   # for the sake of simplicity, we'll remap the entrance to a region to the "previous" region
-        manual.exits.append(hub.entrances[0])
-        # we don't need to remove Hub's exits because the ones it has are still necessary
-
-        for region in multiworld.regions:
-            if region.player == player and "Chapter" in region.name:
-                # rename each entrance and add it to the exits of Hub, then remove this region's exits (chapters shouldn't have any). also rename it
-                current_entrance = region.entrances[0]
-                hub.exits.append(current_entrance)
-                current_entrance.name = f"HubTo{region.name}"
-                region.exits.clear()
-
-                #chapters.append(region.name)
-                #new_exit = hub.add_exits([region.name])
-                #add_rule(world.get_entrance(new_exit[0].name), fullRegionCheck) # I need to add the requirements for each ofthese regions'''
-
-
-        '''from worlds.generic.Rules import add_rule
-        
-        manual = multiworld.get_region("Manual", player)
-        hub = multiworld.get_region("Hub", player)
-        chapters = []
-
-        hub.entrances.clear()
-        manual.set_exits([])
-        manual.add_exits([hub.name])
-
-        for region in multiworld.regions:
-            if region.player == player and "Chapter" in region.name:
-                region.set_exits([])            # the chapters shouldn't have exits in this mode
-                region.entrances.clear()
-                chapters.append(region.name)
-                #new_exit = hub.add_exits([region.name])
-                #add_rule(world.get_entrance(new_exit[0].name), fullRegionCheck) # I need to add the requirements for each ofthese regions
-        hub.add_exits(chapters)'''
 
 
 
@@ -165,7 +122,58 @@ def before_create_items_starting(item_pool: list, world: World, multiworld: Mult
     #
     # Because multiple copies of an item can exist, you need to add an item name
     # to the list multiple times if you want to remove multiple copies of it.
+
+    extraChapterCount = (get_option_value(multiworld, player, "include_empire") + 
+                           get_option_value(multiworld, player, "include_ship") + 
+                           get_option_value(multiworld, player, "include_crypt") + 
+                           get_option_value(multiworld, player, "include_peak"))
+    total_chapters_in_pool = min(16 + extraChapterCount, get_option_value(multiworld, player, "chapters_in_pool"))
+
+    chapters = []
     
+    # for linear mode, get the regions and remove all locations in them
+    if (get_option_value(multiworld, player, "linear_mode")):
+        numStoryChaptersToRemove = 16 - total_chapters_in_pool
+        for i in range(numStoryChaptersToRemove):
+            itemNamesToRemove.append("Progressive Chapter")
+        chapters = [region for region in multiworld.regions if region.player == player and "Chapter" in region.name]    # should always have a size of 16
+
+        for chapter in chapters:
+            if int(chapter.name.split(" ")[1]) > total_chapters_in_pool - extraChapterCount:
+                for location in list(chapter.locations):
+                    locationNamesToRemove.append(location.name)
+
+    # for non-linear mode, get the items first, then find the locations with the same names, use that to make a list of the regions they are in and delete everything in those regions
+    else:
+        numChaptersToRemove = 16 + extraChapterCount - total_chapters_in_pool
+        chapterItemNamesToRemove = []
+        chapterItemNames = [item["name"] for item in item_table if "category" in item and "Chapter" in item.get("category") and is_item_name_enabled(multiworld,player,item.get("name"))]
+        random.shuffle(chapterItemNames)
+        for i in range(numChaptersToRemove):
+            chapterItemNamesToRemove.append(chapterItemNames[i])
+            chapterLocation = next(l for l in location_table if l["name"] == chapterItemNames[i])
+            chapterLocation["removed"] = True
+
+            chapters.append(multiworld.get_region(chapterLocation["region"], player))
+            itemNamesToRemove.append("Map of Arkus Fragment")
+
+        for chapter in chapters:
+            for location in list(chapter.locations):
+                locationNamesToRemove.append(location.name)
+
+        itemNamesToRemove.extend(chapterItemNamesToRemove)
+
+
+    for region in multiworld.regions:
+        if region.player == player:
+            for location in list(region.locations):
+                if location.name in locationNamesToRemove:
+                    region.locations.remove(location)
+    if hasattr(multiworld, "clear_location_cache"):
+        multiworld.clear_location_cache()
+    
+
+
     # if a character is not in the list and whitelist is enabled OR a character is in the list and whitelist is disabled, remove that item
     names_to_remove = get_option_value(multiworld, player, "characters_to_exclude")
     use_character_whitelist = get_option_value(multiworld, player, "whitelist_characters")
@@ -177,15 +185,10 @@ def before_create_items_starting(item_pool: list, world: World, multiworld: Mult
 
     # need to first check if the item is in item_pool
     for item in item_table:
-        #table_item = next(i for i in item_table if i["name"] == item.name)
         if "category" not in item or "Skylander" not in item.get("category") or not is_item_name_enabled(multiworld,player,item.get("name")):
             continue
         item_name = item.get("name")
         character_in_list = False
-        #for char_name in names_to_remove:
-        #    if item_name.casefold() == char_name.casefold():
-        #        character_in_list = True
-        #        break
         if item_name in names_to_remove:
             character_in_list = True
 
@@ -222,8 +225,7 @@ def before_create_items_filler(item_pool: list, world: World, multiworld: MultiW
     # Because multiple copies of an item can exist, you need to add an item name
     # to the list multiple times if you want to remove multiple copies of it.
 
-
-    # if playing nonlinear mode, we need to place Map of Arkus Fragments in the chapter locations and remove any extras
+    # if playing nonlinear mode, we first need to remove any extra Map of Arkus Fragments
     if not get_option_value(multiworld, player, "linear_mode"):
         extra_map_frags = (4 - get_option_value(multiworld, player, "include_empire") - 
                            get_option_value(multiworld, player, "include_ship") - 
@@ -233,22 +235,11 @@ def before_create_items_filler(item_pool: list, world: World, multiworld: MultiW
         for i in range(extra_map_frags):
             itemNamesToRemove.append("Map of Arkus Fragment")
 
-        for location in location_table:
-            if "Level Completion" in location["category"] and is_location_name_enabled(multiworld,player,location["name"]): 
-                level = multiworld.get_location(location["name"], player)
-                item_to_place = next(i for i in item_pool if i.name == "Map of Arkus Fragment")
-                level.place_locked_item(item_to_place)
-                item_pool.remove(item_to_place)
-        
-
-
     for itemName in itemNamesToRemove:
         item = next(i for i in item_pool if i.name == itemName)
         item_pool.remove(item)
 
-
     # since the traps are weight-based, trap and filler generation needs to be overridden here
-    
     extras = len(multiworld.get_unfilled_locations(player=player)) - len(item_pool)
 
     if extras > 0:
@@ -292,6 +283,67 @@ def before_create_items_filler(item_pool: list, world: World, multiworld: MultiW
 
 # The complete item pool prior to being set for generation is provided here, in case you want to make changes to it
 def after_create_items(item_pool: list, world: World, multiworld: MultiWorld, player: int) -> list:
+    
+    extraChapterCount = (get_option_value(multiworld, player, "include_empire") + 
+                           get_option_value(multiworld, player, "include_ship") + 
+                           get_option_value(multiworld, player, "include_crypt") + 
+                           get_option_value(multiworld, player, "include_peak"))
+
+    # make bonus Core Fragments into useful items and place all of them in the chapter locations
+    if not get_option_value(multiworld, player, "linear_mode"):
+        total_required_fragments = min(16 + extraChapterCount, get_option_value(multiworld, player, "chapters_in_pool"), get_option_value(multiworld, player, "chapters_to_beat"))
+        
+        core_frags = [i for i in item_pool if i.name == "Map of Arkus Fragment"]
+        random.shuffle(core_frags)
+        bonus_core_frag_count = len(core_frags) - clamp(total_required_fragments, 1, len(core_frags))
+        for i in range(bonus_core_frag_count):
+            core_frags[i].classification = ItemClassification.useful
+
+        for location in location_table:
+            if "removed" not in location and "Level Completion" in location["category"] and is_location_name_enabled(multiworld,player,location["name"]): 
+                level = multiworld.get_location(location["name"], player)       # if the chapter was already removed, the location table doesn't reflect that
+                item_to_place = next(i for i in item_pool if i.name == "Map of Arkus Fragment")
+                level.place_locked_item(item_to_place)
+                item_pool.remove(item_to_place)
+    # otherwise, make the extra progressive chapters into useful items (this seems to skyrocket the failure rate)
+    #else:
+        #prog_chapters = [i for i in item_pool if i.name == "Progressive Chapter"]
+        #random.shuffle(prog_chapters)
+        #for i in range(2):
+        #    prog_chapters[i].classification = ItemClassification.useful
+    
+    # otherwise, make the extra progressive chapters into useful items  (causes generation failures and I don't know why)
+    #else:
+    #    total_story_chapters = min(22, get_option_value(multiworld, player, "chapters_in_pool"), get_option_value(multiworld, player, "chapters_to_beat")) - extraChapterCount
+    #
+    #    prog_chapters = [i for i in item_pool if i.name == "Progressive Chapter"]
+    #    random.shuffle(prog_chapters)
+    #    print(len(prog_chapters))
+    #    bonus_chapter_count = len(prog_chapters) - clamp(total_story_chapters, 1, len(prog_chapters))
+    #    for i in range(bonus_chapter_count):
+    #        prog_chapters[i].classification = ItemClassification.useful
+
+    '''# make half of the skylanders in each element useful
+    if not get_option_value(multiworld, player, "characters_as_items"):
+        all_skylanders = [item for item in item_table if "category" in item and "Skylander" in item.get("category") and is_item_name_enabled(multiworld,player,item.get("name"))]
+        print(len(item_table))
+        print(len(all_skylanders))
+        random.shuffle(all_skylanders)
+        skylanders = [[]]
+        skylanders.append([item for item in all_skylanders if "Skylander - Fire" in item.get("category")])
+        skylanders.append([item for item in all_skylanders if "Skylander - Water" in item.get("category")])
+        skylanders.append([item for item in all_skylanders if "Skylander - Earth" in item.get("category")])
+        skylanders.append([item for item in all_skylanders if "Skylander - Air" in item.get("category")])
+        skylanders.append([item for item in all_skylanders if "Skylander - Life" in item.get("category")])
+        skylanders.append([item for item in all_skylanders if "Skylander - Undead" in item.get("category")])
+        skylanders.append([item for item in all_skylanders if "Skylander - Tech" in item.get("category")])
+        skylanders.append([item for item in all_skylanders if "Skylander - Magic" in item.get("category")])
+
+        for element in skylanders:
+            print(len(element))
+            for i in range(len(element) // 2):
+                next(i for i in item_pool if i.name == element[i].get("name")).classification = ItemClassification.useful'''
+
     return item_pool
 
 # Called before rules for accessing regions and locations are created. Not clear why you'd want this, but it's here.
@@ -307,53 +359,6 @@ def after_set_rules(world: World, multiworld: MultiWorld, player: int):
         # True if the player can access the location
         # CollectionState is defined in BaseClasses
         return True
-    
-    # test #1: try the original code here and see what happens
-    # test #2: if 1 doesn't work, add both sets of connections to the regions file and remove the unnecessary ones here. may need to omit Chapter 2ToHub
-    
-    '''this doesn't work'''
-
-    # in non-linear mode, we need to make the hub the new starting region and connect it to all chapters
-    if get_option_value(multiworld, player, "linear_mode"):
-        
-        ''' # new idea: don't remove the entrances and exits, but change their links
-        # i.e. get Manual's exit and change the 
-        manual = multiworld.get_region("Manual", player)
-        hub = multiworld.get_region("Hub", player)
-
-        manual.exits.clear()    # this exit needs to go between Hub and Chapter 1 instead
-        hub.entrances.clear()
-        manual.add_exits(["Hub"])
-        #manual.exits[0].connected_region = hub
-        #manual.exits[0].name = "ManualToHub"
-        #hub.entrances[0].name = "ManualToHub"   # for the sake of simplicity, we'll remap the entrance to a region to the "previous" region
-        #manual.exits.append(hub.entrances[0])
-        # we don't need to remove Hub's exits because the ones it has are still necessary
-
-        for region in multiworld.regions:
-            if region.player == player and "Chapter" in region.name:
-                # rename each entrance and add it to the exits of Hub, then remove this region's exits (chapters shouldn't have any). also rename it
-                current_entrance = region.entrances[0]
-                hub.exits.append(current_entrance)
-                current_entrance.name = f"HubTo{region.name}"
-                region.exits.clear()
-
-                #chapters.append(region.name)
-                #new_exit = hub.add_exits([region.name])
-                #add_rule(world.get_entrance(new_exit[0].name), fullRegionCheck) # I need to add the requirements for each ofthese regions
-
-
-        #hub = multiworld.get_region("Hub", player)
-        for exit in hub.exits:
-            if exit.name == "HubToFinalBoss":
-                exit.access_rule = lambda state: state.has(item="Map of Arkus Fragment", player=player, count=get_option_value(multiworld, player, "chapters_to_beat"))
-            elif "Chapter" in exit.name:
-                # split HubTo... to get the chapter, find that region in the region table, grab the level name from the requires string, profit
-                chapter_name = exit.name.split("To", 2)[1]
-                level_name = region_table[chapter_name]["requires"].split("|")[3]
-                exit.access_rule = lambda state: state.has(item=level_name, player=player, count=1)'''
-
-
 
     ## Common functions:
     # location = world.get_location(location_name, player)
@@ -364,6 +369,30 @@ def after_set_rules(world: World, multiworld: MultiWorld, player: int):
     # location.access_rule = lambda state: old_rule(state) and Example_Rule(state)
     # OR
     # location.access_rule = lambda state: old_rule(state) or Example_Rule(state)
+
+    # we have to remove chapters here because it fails if you do it any earlier
+    chaptersToRemove = []
+
+    if (get_option_value(multiworld, player, "linear_mode")):
+        
+        extraChapterCount = (get_option_value(multiworld, player, "include_empire") + 
+                           get_option_value(multiworld, player, "include_ship") + 
+                           get_option_value(multiworld, player, "include_crypt") + 
+                           get_option_value(multiworld, player, "include_peak"))
+        
+        chapters = [region for region in multiworld.regions if region.player == player and "Chapter" in region.name]    # should always have a size of 16
+
+        for chapter in chapters:
+            if int(chapter.name.split(" ")[1]) > min(16 + extraChapterCount, 
+                                                     get_option_value(multiworld, player, "chapters_in_pool")) - extraChapterCount:
+                chaptersToRemove.append(chapter)
+    else:
+        chapterLocations = [l for l in location_table if "removed" in l.keys()]
+        
+        chaptersToRemove.extend(multiworld.get_region(chapterLocation["region"], player) for chapterLocation in chapterLocations)
+
+    for region in chaptersToRemove:                 
+        del(multiworld.regions.region_cache[player][region.name])
 
 # The item name to create is provided before the item is created, in case you want to make changes to it
 def before_create_item(item_name: str, world: World, multiworld: MultiWorld, player: int) -> str:

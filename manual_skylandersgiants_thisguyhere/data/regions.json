@@ -2,7 +2,7 @@
   "$schema": "https://github.com/ManualForArchipelago/Manual/raw/main/schemas/Manual.categories.schema.json",
   "Chapter 1": {
     "connects_to": [
-      "Chapter 2"
+      "Chapter 2", "Final Boss"
     ],
     "requires": "|Progressive Chapter:1| or |Time of the Giants|",
     "starting": true
@@ -92,12 +92,12 @@
     "requires": "|Progressive Chapter:15| or |Lost City of Arkus|"
   },
   "Chapter 16": {
-    "connects_to": ["Final Boss"],
+    "connects_to": [],
     "requires": "|Progressive Chapter:16| or |Bringing Order to Kaos!|"
   },
   "Final Boss": {
     "connects_to": [],
-    "requires": "|Progressive Chapter:16| or ({OptOneDynamic(Map of Arkus Fragment:chapters_to_beat)} and {YamlDisabled(linear_mode)})"
+    "requires": "({OptOneDynamic(Progressive Chapter:chapters_to_beat)} and {YamlEnabled(linear_mode)} and {OptAll(|Darklight Crypt| and |Empire of Ice| and |Pirate Seas| and |Dragon's Peak|)}) or ({OptOneDynamic(Map of Arkus Fragment:chapters_to_beat)} and {YamlDisabled(linear_mode)})"
   },
 
 
